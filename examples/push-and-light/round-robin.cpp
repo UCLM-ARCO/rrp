@@ -26,12 +26,15 @@ process_message(byte* message, byte size) {
 	led.off();
 }
 
+uint32_t start;
+
 void
 setup() {
     Serial.begin(115200);
     rs485.begin(19200);
 
     Serial.print("\nsetup done --\n");
+    start = millis();
 }
 
 void
@@ -40,18 +43,28 @@ loop() {
     bool newState = button.readSwitch();
 
     if (newState != state) {
-	byte dst[4] = {1, 2, 3, 1};
-	const char* message = newState ? "ON" : "OFF";
-	rs485.send_to(dst[ADDR], (const byte*)message, strlen(message));
-	state = newState;
+    	byte dst[4] = {1, 2, 3, 1};
+    	const char* message = newState ? "ON" : "OFF";
+    	rs485.send_to(dst[ADDR], (const byte*)message, strlen(message));
+    	state = newState;
     }
 
     if (rs485.available()) {
-	byte src;
-	byte* message;
-	byte size;
+    	byte src;
+    	byte* message;
+    	byte size;
 
-	rs485.receive_from(&src, &message, &size);
-	process_message(message, size);
+    	rs485.receive_from(&src, &message, &size);
+    	process_message(message, size);
     }
+
+    static uint32_t counter = 1;
+    if (millis() - start > 1000) {
+	Serial.print("counter: ");
+	Serial.println(counter);
+	start = millis();
+	counter = 0;
+    }
+    counter++;
+
 }

@@ -2,8 +2,11 @@
 # -*- mode: python; coding: utf-8 -*-
 
 import serial
+import traceback
 from hexdump import hexdump
 from collections import deque
+from threading import Thread
+from Queue import Queue, Full
 
 
 class Message(object):
@@ -13,6 +16,86 @@ class Message(object):
         self.type = type
         self.size = size
         self.payload = payload
+
+        error = "Invalid message size, not enough data"
+        if size > 0:
+            assert payload is not None, error
+            assert size <= len(payload), error
+
+    def marshall(self):
+        data = RRP.MAGIC
+        data += chr(self.source)       # source
+        data += chr(self.destination)  # destination addres
+        data += chr(self.type)         # type of message
+
+        if self.type in [RRP.TYPE_RESPONSE, RRP.TYPE_REQUEST]:
+            data += chr(self.size)     # size of payload
+            data += self.payload       # payload
+        return data
+
+    def __repr__(self):
+        retval = "Message ({} bytes):\n".format(self.size)
+        retval += hexdump(self.marshall(), result="return")
+        return retval
+
+
+class Arbiter(object):
+    def __init__(self, rrp, nodes=None):
+        self.rrp = rrp
+        self.nodes = nodes
+
+        self.finished = False
+        self.out_queue = deque(maxlen=50)
+        self.in_queue = Queue(maxsize=50)
+        self.promiscuous = False
+
+    def run_in_thread(self):
+        self.thread = Thread(target=self.run)
+        self.thread.daemon = True
+        self.thread.start()
+
+    def finish(self, wait=True):
+        self.finished = True
+        self.thread.join()
+
+    def run(self, debug=False):
+        if not self.nodes:
+            self.nodes = self.rrp.discover()
+
+        try:
+            while not self.finished:
+                messages = self.rrp.send_token(self.nodes, debug=debug)
+                self.append_in_queue(messages)
+                self.flush_out_queue()
+        except KeyboardInterrupt:
+            pass
+
+    def send(self, message, debug=False):
+        self.out_queue.appendleft(message)
+        if debug:
+            print message
+
+    def flush_out_queue(self):
+        while self.out_queue:
+            msg = self.out_queue.pop()
+            self.rrp.send_message(msg)
+
+    def append_in_queue(self, messages):
+        while messages:
+            try:
+                m = messages.pop()
+                self.in_queue.put_nowait(m)
+            except Full:
+                pass
+
+    def receive(self):
+        # NOTE: allow Ctr+C to work here, see http://bugs.python.org/issue1360
+        oneyear = 365 * 24 * 60 * 60
+        while True:
+            return self.in_queue.get(True, oneyear)
+
+    def set_promiscuous(self):
+        self.promiscuous = True
 
 
 class RRP(object):
@@ -29,6 +112,8 @@ class RRP(object):
 
     def __init__(self, device, timeout=5):
         self.device = serial.Serial(device, baudrate=19200, timeout=timeout / 1000.0)
+
+        self.messages = deque(maxlen=50)
         self.set_as_driver()
 
     def set_as_driver(self):
@@ -76,6 +161,9 @@ class RRP(object):
                 destination = ord(self.device.read(1))
                 type = ord(self.device.read(1))
 
+                message = Message(source, destination, type)
+                self.messages.appendleft(message)
+
                 if debug:
                     print "received message:"
                     print " - token in device:", addr
@@ -90,26 +178,25 @@ class RRP(object):
                 if size:
                     payload = self.device.read(size)
 
+                message.size = size
+                message.payload = payload
+
                 if debug:
                     print " - size:", size
                     print " - payload: '{}'".format(payload)
 
+        return self.messages
+
     def send(self, dest, payload="", type=TYPE_RESPONSE, debug=False):
-        data = RRP.MAGIC
-        data += chr(0)                 # source (0 is arbiter)
-        data += chr(dest)              # destination addres
-        data += chr(type)              # type of message
-
-        if type in [RRP.TYPE_RESPONSE, RRP.TYPE_REQUEST]:
-            data += chr(len(payload))  # size of payload
-            data += payload            # payload
-
+        message = Message(0, dest, type, len(payload), payload)
         if debug:
-            print "Send message  ({} bytes):".format(len(data))
-            hexdump(data)
+            print message
 
+        self.send_message(message)
+
+    def send_message(self, message):
         self.set_as_driver()
-        self.device.write(data)
+        self.device.write(message.marshall())
         self.device.flush()
 
     def receive(self):
@@ -154,9 +241,10 @@ class Worker(object):
         self.app = app
         self.rrp = RRP(device)
         self.nodes = []
+        self.arbiter = None
 
         # FIXME: remove this, added only to speed up devel
-        self.nodes = [1, 2, 3]
+        # self.nodes = [1, 2, 3]
 
     def execute(self, cmd, args):
         fn = getattr(self, "cmd_" + cmd, None)
@@ -186,6 +274,8 @@ class Worker(object):
 
     def cmd_discover(self, *args):
         """Performs a full device discovery"""
+        assert self.arbiter is None, "Could not discover while arbiter is running"
+
         print "Discovering devices..."
         self.nodes = self.rrp.discover()
         print " - nodes:", self.nodes
@@ -202,28 +292,72 @@ class Worker(object):
 
         data = " ".join(data)
         data = data.decode("string_escape")
-        self.rrp.send(dst, data, RRP.TYPE_REQUEST, debug=True)
 
-    def cmd_start_rr(self, debug=False):
-        """Starts the Round Robin algorithm to enable devices to send data
-            |- params: [debug=false]
-           NOTE: you need to discover nodes first."""
-        if not self.nodes:
-            raise RuntimeError("No nodes available, please use discover first")
+        if self.arbiter is None:
+            return self.rrp.send(dst, data, RRP.TYPE_REQUEST, debug=True)
 
-        try:
-            while True:
-                self.rrp.send_token(self.nodes, debug=bool(debug))
-        except KeyboardInterrupt:
-            print "\r\r\rRound Robin algorithm stopped"
-            return
+        msg = Message(0, dst, RRP.TYPE_REQUEST, len(data), data)
+        self.arbiter.send(msg, debug=True)
+
+    def cmd_start_rr(self, foreground=False, debug=False):
+        """Starts the Round Robin arbiter to enable devices to send data
+            |- params: [foreground=False [debug=false]]"""
+
+        assert self.arbiter is None, "Round Robin arbiter already running!"
+
+        if isinstance(debug, str):
+            debug = debug != "0"
+
+        self.arbiter = Arbiter(self.rrp, self.nodes)
+        if foreground:
+            print "Round Robin arbiter running (debug={})...".format(debug)
+            print "Press Ctrl+C to stop it"
+            return self.arbiter.run(debug)
+
+        if debug:
+            print "NOTE: debug only could be enabled on foreground mode"
+
+        self.arbiter.run_in_thread()
+        print "Round Robin arbiter running in background"
+
+    def cmd_stop_rr(self):
+        """Stops the running Round Robin arbiter (if any)"""
+
+        assert self.arbiter is not None, "Round Robin arbiter is not running"
+
+        self.arbiter.finish()
+        self.arbiter = None
+        print "Round Robin arbiter stopped"
 
     def cmd_status(self, *args):
         """Show current shell status"""
         print " - {} devices detected:".format(len(self.nodes)), self.nodes
 
         rr_status = "stopped"
+        if self.arbiter is not None:
+            rr_status = "running"
         print " - Round Robin arbiter:", rr_status
+
+    def cmd_receive(self, promiscuous=True):
+        """Receive and show messages on network
+            | params: [promiscuous=False]"""
+
+        assert self.arbiter is not None, \
+            "To receive messages, Round Robin arbiter must be running"
+
+        if isinstance(promiscuous, str):
+            promiscuous = promiscuous != "0"
+        if promiscuous:
+            self.arbiter.set_promiscuous()
+
+        try:
+            print "Start to show received messages..."
+            while True:
+                message = self.arbiter.receive()
+                print message
+        except KeyboardInterrupt:
+            pass
+        print "\r\r\rStop showing received messages"
 
 
 class Shell(object):
@@ -231,6 +365,7 @@ class Shell(object):
         self.finished = False
         self.worker = Worker(self, device)
         self.history = deque(maxlen=5)
+        self.print_traceback = False
 
     def prompt_input(self):
         prompt = "> "
@@ -263,7 +398,7 @@ class Shell(object):
             self.history.append(userinput)
 
         fields = userinput.split()
-        cmd = fields[0]
+        cmd = fields[0].lower()
         args = fields[1:]
 
         if cmd in ["?", "h"]:
@@ -272,15 +407,23 @@ class Shell(object):
             cmd = "quit"
         elif cmd in ["s"]:
             cmd = "send"
-        elif cmd in ["rr"]:
+        elif cmd in ["rr", "start"]:
             cmd = "start_rr"
+        elif cmd in ["stop"]:
+            cmd = "stop_rr"
         elif cmd in ["st"]:
             cmd = "status"
+        elif cmd in ["print_traceback", "ptb"]:
+            print "Print traceback on error activated"
+            self.print_traceback = True
+            return
 
         try:
             self.worker.execute(cmd, args)
         except Exception as e:
             print "ERROR:", e
+            if self.print_traceback:
+                traceback.print_exc()
 
 
 if __name__ == '__main__':

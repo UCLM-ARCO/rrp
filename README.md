@@ -58,10 +58,10 @@ expired. Then, waits `TIMEOUT * 3` to verify that the input queue of each
 device is empty. After that, it sends a `DISCOVER` message to the
 broadcast address and again waits `TIMEOUT * 3`. This message forces every
 device to enter in `SYNC` mode, waiting and responding only to `SYN`
-messages. Once the node receives and answers a SYNC message, it
+messages. Once the node receives and answers a `SYN` message, it
 continues its previous work.
 
-When a device enters SYNC mode, a timeout will start. If the timeout
+When a device enters `SYNC` mode, a timeout will start. If the timeout
 expires and no `SYN` messages is received, it will exit `SYNC` mode.
 
 Iterating over nodes
