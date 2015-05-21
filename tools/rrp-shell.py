@@ -3,6 +3,7 @@
 
 import serial
 import traceback
+from argparse import ArgumentParser
 from hexdump import hexdump
 from collections import deque
 from threading import Thread
@@ -243,9 +244,6 @@ class Worker(object):
         self.nodes = []
         self.arbiter = None
 
-        # FIXME: remove this, added only to speed up devel
-        # self.nodes = [1, 2, 3]
-
     def execute(self, cmd, args):
         fn = getattr(self, "cmd_" + cmd, None)
         if fn is not None:
@@ -371,7 +369,7 @@ class Shell(object):
         prompt = "> "
         return raw_input(prompt)
 
-    def run(self):
+    def run_interactive(self):
         print "Welcome to RRP shell!"
         print "Enter 'h', '?' or 'help' to see your options\n"
 
@@ -385,6 +383,9 @@ class Shell(object):
                 self.finished = True
 
         print "\r\r\rBye!"
+
+    def run_as_daemon(self):
+        self.worker.execute("start_rr", [True])
 
     def run_command(self, userinput):
         if userinput == "\x1b\x5b\x41":  # UP_ARROW
@@ -427,4 +428,16 @@ class Shell(object):
 
 
 if __name__ == '__main__':
-    Shell().run()
+    parser = ArgumentParser("Round Robin arbiter shell")
+    parser.add_argument("--device", default="/dev/ttyUSB3",
+                        help='USB device to use')
+    parser.add_argument('--daemon', action='store_true',
+                        help='Launch arbiter in daemon mode (no interactive)')
+
+    args = parser.parse_args()
+    s = Shell(args.device)
+
+    if not args.daemon:
+        s.run_interactive()
+    else:
+        s.run_as_daemon()
