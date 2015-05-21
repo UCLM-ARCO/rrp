@@ -49,8 +49,6 @@ byte
 RS485Driver::send_to(const byte to, const byte* data, const byte size) {
     _process();
 
-    Serial.println("send called");
-
     uint32_t now = millis();
     do {
 	if (!_wait_magic())
@@ -85,19 +83,15 @@ RS485Driver::send_to(const byte to, const byte* data, const byte size) {
 	_rs485.flush();
 	digitalWrite(_rtsPin, LOW);
 
-	Serial.println(" - send ok");
 	return size;
 
     } while(abs(millis() - now) < 200);
 
-    Serial.println(" - send FAILED");
     return 0;
 }
 
 void
 RS485Driver::_enter_sync_mode() {
-    Serial.println("enter sync mode");
-
     // flush input queue
     char c;
     while (_getc(&c));
@@ -147,8 +141,6 @@ RS485Driver::_enter_sync_mode() {
 
 void
 RS485Driver::_on_request(byte source) {
-    Serial.println("request received");
-
     _message.source = source;
     _message.size = 0;
     GETC_OR_RETURN(_message.size);
@@ -163,7 +155,7 @@ RS485Driver::_on_request(byte source) {
 
 void
 RS485Driver::_on_response(byte source) {
-    Serial.println("response received");
+    // FIXME: not implemented
 }
 
 void
@@ -196,9 +188,6 @@ RS485Driver::_process() {
 
 	else if (type == RRP_RESPONSE)
 	    _on_response(source);
-
-	// else
-	//     Serial.println("message discarded");
     }
 }
 

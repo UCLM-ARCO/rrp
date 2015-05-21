@@ -404,7 +404,7 @@ class Shell(object):
 
         if cmd in ["?", "h"]:
             cmd = "help"
-        elif cmd in ["q"]:
+        elif cmd in ["q", "exit"]:
             cmd = "quit"
         elif cmd in ["s"]:
             cmd = "send"
