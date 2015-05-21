@@ -1,0 +1,14 @@
+Source: rrp
+Section: utils
+Priority: extra
+Maintainer: Oscar Aceña Herrera <oscaracena@gmail.com>
+Build-Depends: debhelper (>= 7.0.50~), dh-python, python
+Standards-Version: 3.9.6
+
+Package: rrp
+Architecture: all
+Depends: ${misc:Depends}, python
+Description: Round Robin Protocol
+ RRP is a Round Robin protocol for RS-485 devices. It gives a quantum
+ of time to each device to be able to send or receive data. It
+ includes a Python version of the arbiter, and a library for Arduino.
