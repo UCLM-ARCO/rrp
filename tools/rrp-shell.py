@@ -1,13 +1,23 @@
 #!/usr/bin/python
 # -*- mode: python; coding: utf-8 -*-
 
+import os
+import sys
 import serial
 import traceback
+import Ice
 from argparse import ArgumentParser
 from hexdump import hexdump
 from collections import deque
 from threading import Thread
 from Queue import Queue, Full
+
+pwd = os.path.dirname(__file__)
+path = os.path.join(pwd, "remoteio.ice")
+if not os.path.exists(path):
+    path = "/usr/share/slice/remoteio.ice"
+Ice.loadSlice(path)
+import RemoteIO
 
 
 class Message(object):
@@ -22,6 +32,22 @@ class Message(object):
         if size > 0:
             assert payload is not None, error
             assert size <= len(payload), error
+
+    @classmethod
+    def from_byteseq(cls, data):
+        assert data and len(data) >= 6 and data[:3] == "RRP", "Invalid message"
+
+        source = ord(data[3])
+        destination = ord(data[4])
+        type = ord(data[5])
+
+        if type in [RRP.TYPE_RESPONSE, RRP.TYPE_REQUEST]:
+            size = ord(data[6])
+            payload = ""
+            if size:
+                payload = data[7:]
+
+        return Message(source, destination, type, size, payload)
 
     def marshall(self):
         data = RRP.MAGIC
@@ -40,10 +66,60 @@ class Message(object):
         return retval
 
 
+class RemoteIOIO(RemoteIO.IO):
+    def __init__(self):
+        self.arbier = None
+        self.observer = None
+
+    def send(self, data, current):
+        """Used to queue data on arbiter, to be sent to RS-485 network"""
+        if self.arbiter is None:
+            return
+
+        message = Message.from_byteseq(data)
+        self.arbiter.send(message)
+
+    def notify(self, message):
+        """Used to send a message from the RS-485 network to our observer"""
+        if self.observer is None:
+            return
+
+        self.observer.send(message.marshall())
+
+    def set_arbiter(self, arbiter):
+        self.arbiter = arbiter
+
+    def register(self, observer, current):
+        """Used to register a new observer, that will be notified about new
+        data comming from the arbiter, and from the RS-485 network"""
+
+        assert self.observer is None, "Only one observer is allowed"
+        self.observer = observer
+
+
+class RemoteIOService(object):
+    def __init__(self, args):
+        self.ic = Ice.initialize(args)
+
+        adapter = self.ic.createObjectAdapter("Adapter")
+        adapter.activate()
+
+        self.servant = RemoteIOIO()
+        self.notify = self.servant.notify
+        self.set_arbiter = self.servant.set_arbiter
+
+        proxy = adapter.add(self.servant, self.ic.stringToIdentity("RemoteIO"))
+        print "Remote IO interface ready: '{}'".format(proxy)
+
+
 class Arbiter(object):
-    def __init__(self, rrp, nodes=None):
+    def __init__(self, rrp, nodes=None, remoteio=None):
         self.rrp = rrp
         self.nodes = nodes
+        self.remoteio = remoteio
+
+        if self.remoteio is not None:
+            self.remoteio.set_arbiter(self)
 
         self.finished = False
         self.out_queue = deque(maxlen=50)
@@ -86,8 +162,15 @@ class Arbiter(object):
             try:
                 m = messages.pop()
                 self.in_queue.put_nowait(m)
+                self.notify_message(m)
             except Full:
                 pass
+
+    def notify_message(self, message):
+        if self.remoteio is None:
+            return
+
+        self.remoteio.notify(message)
 
     def receive(self):
         # NOTE: allow Ctr+C to work here, see http://bugs.python.org/issue1360
@@ -238,9 +321,10 @@ class RRP(object):
 
 
 class Worker(object):
-    def __init__(self, app, device):
+    def __init__(self, app, args):
         self.app = app
-        self.rrp = RRP(device)
+        self.app_args = args
+        self.rrp = RRP(args.device)
         self.nodes = []
         self.arbiter = None
 
@@ -306,11 +390,19 @@ class Worker(object):
         if isinstance(debug, str):
             debug = debug != "0"
 
-        self.arbiter = Arbiter(self.rrp, self.nodes)
+        self.remoteio = None
+        if self.app_args.ice_iface:
+            self.remoteio = RemoteIOService(sys.argv)
+
+        self.arbiter = Arbiter(self.rrp, self.nodes, self.remoteio)
+
         if foreground:
             print "Round Robin arbiter running (debug={})...".format(debug)
             print "Press Ctrl+C to stop it"
-            return self.arbiter.run(debug)
+            try:
+                return self.arbiter.run(debug)
+            except KeyboardInterrupt:
+                return
 
         if debug:
             print "NOTE: debug only could be enabled on foreground mode"
@@ -359,9 +451,9 @@ class Worker(object):
 
 
 class Shell(object):
-    def __init__(self, device="/dev/ttyUSB3"):
+    def __init__(self, args):
         self.finished = False
-        self.worker = Worker(self, device)
+        self.worker = Worker(self, args)
         self.history = deque(maxlen=5)
         self.print_traceback = False
 
@@ -433,9 +525,11 @@ if __name__ == '__main__':
                         help='USB device to use')
     parser.add_argument('--daemon', action='store_true',
                         help='Launch arbiter in daemon mode (no interactive)')
+    parser.add_argument("--ice-iface", action="store_true",
+                        help="Add Ice RRP interface to send/receive data")
 
-    args = parser.parse_args()
-    s = Shell(args.device)
+    args = parser.parse_known_args()[0]
+    s = Shell(args)
 
     if not args.daemon:
         s.run_interactive()
