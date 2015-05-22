@@ -12,8 +12,5 @@ install:
 	install -m 644 src/rrp.cpp $(DESTDIR)/usr/share/arduino/libraries/RRP
 	install -m 644 src/rrp.h $(DESTDIR)/usr/share/arduino/libraries/RRP
 
-	install -d $(DESTDIR)/usr/share/slice/
-	install -m 644 tools/remoteio.ice $(DESTDIR)/usr/share/slice/
-
 	install -d $(DESTDIR)/usr/share/rrp
-	install -m 644 tools/remoteio.config $(DESTDIR)/usr/share/rrp
+	install -m 644 tools/rrp-shell.config $(DESTDIR)/usr/share/rrp
