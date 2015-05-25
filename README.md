@@ -95,12 +95,12 @@ Each message has the following structure:
 
 The 'type' of message could be one of the following:
 
-* `DISCOVER` message, used to alert devices to enter on `SYNC` mode
-* `SYN` message, used in discovery process
-* `OK` response, the answer of a discovered device
-* `TOKEN` message, sent to allow a device to became driver
-* `REQUEST` message, sent by a device to another device
-* `RESPONSE` message, sent as a response to a `REQUEST` message
+* 0: `DISCOVER` message, used to alert devices to enter on `SYNC` mode
+* 1: `SYN` message, used in discovery process
+* 2: `OK` response, the answer of a discovered device
+* 3: `TOKEN` message, sent to allow a device to became driver
+* 4: `REQUEST` message, sent by a device to another device
+* 5: `RESPONSE` message, sent as a response to a `REQUEST` message
 
 If the 'type' is `REQUEST` or `RESPONSE`, the message has the
 following body:
