@@ -84,7 +84,10 @@ class RemoteIOIO(RemoteIO.IO):
         if self.observer is None:
             return
 
-        self.observer.send(message.marshall())
+        try:
+            self.observer.send(message.marshall())
+        except Ice.Exception:
+            print "ERROR: while dispatching message to observer, ignoring it"
 
     def set_arbiter(self, arbiter):
         self.arbiter = arbiter
