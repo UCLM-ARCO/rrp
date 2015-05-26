@@ -161,12 +161,12 @@ class Arbiter(object):
 
     def append_in_queue(self, messages):
         while messages:
+            m = messages.pop()
             try:
-                m = messages.pop()
                 self.in_queue.put_nowait(m)
-                self.notify_message(m)
             except Full:
                 pass
+            self.notify_message(m)
 
     def notify_message(self, message):
         if self.remoteio is None:

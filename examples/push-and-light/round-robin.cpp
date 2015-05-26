@@ -26,15 +26,12 @@ process_message(byte* message, byte size) {
 	led.off();
 }
 
-uint32_t start;
-
 void
 setup() {
     Serial.begin(115200);
     rs485.begin(19200);
 
     Serial.print("\nsetup done --\n");
-    start = millis();
 }
 
 void
@@ -57,14 +54,4 @@ loop() {
     	rs485.receive_from(&src, &message, &size);
     	process_message(message, size);
     }
-
-    static uint32_t counter = 1;
-    if (millis() - start > 1000) {
-	Serial.print("counter: ");
-	Serial.println(counter);
-	start = millis();
-	counter = 0;
-    }
-    counter++;
-
 }
