@@ -7,6 +7,12 @@
 
 const char* MAGIC = "RRP";
 
+RS485Driver::RS485Driver(byte rtsPin, byte rxPin, byte txPin) :
+    _rtsPin(rtsPin),
+    _rs485(rxPin, txPin),
+    _myAddress(254) {
+}
+
 RS485Driver::RS485Driver(byte rtsPin, byte rxPin, byte txPin, byte myAddress) :
     _rtsPin(rtsPin),
     _rs485(rxPin, txPin),

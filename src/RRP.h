@@ -20,7 +20,9 @@ typedef struct {
 
 class RS485Driver {
 public:
+    RS485Driver(byte rtsPin, byte rxPin, byte txPin);
     RS485Driver(byte rtsPin, byte rxPin, byte txPin, byte myAddress);
+    void setMyAddr(byte addr) { _myAddress = addr; }
     void begin(uint16_t speed=19200);
 
     byte available();
