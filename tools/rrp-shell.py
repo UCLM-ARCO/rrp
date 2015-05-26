@@ -93,7 +93,9 @@ class RemoteIOIO(RemoteIO.IO):
         """Used to register a new observer, that will be notified about new
         data comming from the arbiter, and from the RS-485 network"""
 
-        assert self.observer is None, "Only one observer is allowed"
+        if self.observer is not None:
+            print "WARNING: overwriting old observer"
+
         self.observer = observer
 
 

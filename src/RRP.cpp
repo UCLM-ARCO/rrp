@@ -1,7 +1,7 @@
 // -*- mode: c++; coding: utf-8 -*-
 
 #include <Arduino.h>
-#include <rrp.h>
+#include <RRP.h>
 
 // FIXME: add support for responses
 

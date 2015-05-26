@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 #include <TinkerKit.h>
-#include <rrp.h>
+#include <RRP.h>
 
 //
 // NOTE: define ADDR on compilation time to be 1, 2 or 3
