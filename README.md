@@ -40,7 +40,7 @@ repeaters). There are two reserved address:
 * 255: the broadcast address, used to send a non-responding message to
   all nodes
 
-Every other address its free to be used by any device.
+Every other address are free to be used by any device.
 
 The discovery
 -------------
@@ -71,7 +71,7 @@ When the arbiter has a complete list of nodes, it iters over each one
 sending a `TOKEN` message. Then, releases the driver role becoming a
 reader. If the addressed node needs to use the network, it accepts the
 driver role, and sends his message. It needs to use the network before
-the arbiter `TIMEOUT` has expired, otherwise a collision will happend.
+the arbiter's `TIMEOUT` has expired, otherwise a collision will happend.
 
 If the device sends a message, the arbiter's `TIMEOUT` is reset. If the
 message is addressed to another device, and this device wants to
