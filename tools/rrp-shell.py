@@ -7,7 +7,6 @@ import serial
 import traceback
 import Ice
 from argparse import ArgumentParser
-from hexdump import hexdump
 from collections import deque
 from threading import Thread
 from Queue import Queue, Full
@@ -61,6 +60,7 @@ class Message(object):
         return data
 
     def __repr__(self):
+        from hexdump import hexdump
         retval = "Message ({} bytes):\n".format(self.size)
         retval += hexdump(self.marshall(), result="return")
         return retval

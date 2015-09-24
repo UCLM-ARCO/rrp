@@ -1,3 +1,9 @@
+rrp (0.20150924-1) unstable; urgency=low
+
+  * New release, rrp-shell: remove hexdump dep
+
+ -- Oscar Aceña Herrera <oscaracena@gmail.com>  Thu, 24 Sep 2015 10:09:38 +0200
+
 rrp (0.20150522-1) unstable; urgency=low
 
   * New release
@@ -9,4 +15,3 @@ rrp (0.20150521-1) unstable; urgency=low
   * Initial release
 
  -- Oscar Aceña Herrera <oscaracena@gmail.com>  Thu, 21 May 2015 13:14:04 +0200
-
