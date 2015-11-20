@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python -u
 # -*- mode: python; coding: utf-8 -*-
 
 import os
@@ -104,6 +104,17 @@ class RemoteIOIO(RemoteIO.IO):
 
 class RemoteIOService(object):
     def __init__(self, args):
+        default_config = "/usr/share/rrp/rrp-shell.config"
+
+        config_defined = False
+        for a in args:
+            if a.startswith("--Ice.Config="):
+                config_defined = True
+                break
+
+        if not config_defined:
+            args.append("--Ice.Config={}".format(default_config))
+
         self.ic = Ice.initialize(args)
 
         adapter = self.ic.createObjectAdapter("Adapter")
