@@ -6,6 +6,7 @@ import sys
 import serial
 import traceback
 import Ice
+import logging
 from argparse import ArgumentParser
 from collections import deque
 from threading import Thread
@@ -17,6 +18,8 @@ if not os.path.exists(path):
     path = "/usr/share/slice/remoteio.ice"
 Ice.loadSlice(path)
 import RemoteIO
+
+logging.getLogger().setLevel(logging.INFO)
 
 
 class Message(object):
@@ -87,7 +90,7 @@ class RemoteIOIO(RemoteIO.IO):
         try:
             self.observer.send(message.marshall())
         except Ice.Exception:
-            print "ERROR: while dispatching message to observer, ignoring it"
+            logging.error("while dispatching message to observer, ignoring it")
 
     def set_arbiter(self, arbiter):
         self.arbiter = arbiter
@@ -96,8 +99,9 @@ class RemoteIOIO(RemoteIO.IO):
         """Used to register a new observer, that will be notified about new
         data comming from the arbiter, and from the RS-485 network"""
 
+        logging.info("registering a new observer: {}".format(observer))
         if self.observer is not None:
-            print "WARNING: overwriting old observer"
+            logging.warn("overwriting old observer")
 
         self.observer = observer
 
@@ -125,7 +129,7 @@ class RemoteIOService(object):
         self.set_arbiter = self.servant.set_arbiter
 
         proxy = adapter.add(self.servant, self.ic.stringToIdentity("RemoteIO"))
-        print "Remote IO interface ready: '{}'".format(proxy)
+        logging.info("Remote IO interface ready: '{}'".format(proxy))
 
 
 class Arbiter(object):
@@ -166,7 +170,7 @@ class Arbiter(object):
     def send(self, message, debug=False):
         self.out_queue.appendleft(message)
         if debug:
-            print message
+            logging.info(message)
 
     def flush_out_queue(self):
         while self.out_queue:
@@ -265,11 +269,11 @@ class RRP(object):
                 self.messages.appendleft(message)
 
                 if debug:
-                    print "received message:"
-                    print " - token in device:", addr
-                    print " - message from:", source
-                    print " - destination:", destination
-                    print " - type:", type
+                    logging.info("received message:")
+                    logging.info(" - token in device: " + str(addr))
+                    logging.info(" - message from: " + str(source))
+                    logging.info(" - destination: " + str(destination))
+                    logging.info(" - type: " + str(type))
 
                 if type not in [RRP.TYPE_REQUEST, RRP.TYPE_RESPONSE]:
                     continue
@@ -282,15 +286,15 @@ class RRP(object):
                 message.payload = payload
 
                 if debug:
-                    print " - size:", size
-                    print " - payload: '{}'".format(payload)
+                    logging.info(" - size: " + str(size))
+                    logging.info(" - payload: '{}'".format(payload))
 
         return self.messages
 
     def send(self, dest, payload="", type=TYPE_RESPONSE, debug=False):
         message = Message(0, dest, type, len(payload), payload)
         if debug:
-            print message
+            logging.info(message)
 
         self.send_message(message)
 
@@ -315,7 +319,7 @@ class RRP(object):
             payload = self.device.read(size)
 
         if destination != 0:
-            print "WARNING: received a message not addressed to arbiter!"
+            logging.warn("received a message not addressed to arbiter!")
 
         message = Message(source, destination, type, size, payload)
         return message
@@ -360,11 +364,11 @@ class Worker(object):
 
         padding = max([len(x) - 4 for x in cmds])
 
-        print "Available commands and its descriptions:\n"
+        print("Available commands and its descriptions:\n")
         for i in range(len(cmds)):
             name = cmds[i][4:]
             padd = padding - len(name)
-            print "", name, padd * " ", docs[i]
+            print("", name, padd * " ", docs[i])
 
     def cmd_quit(self, *args):
         """Exits this program"""
@@ -374,9 +378,9 @@ class Worker(object):
         """Performs a full device discovery"""
         assert self.arbiter is None, "Could not discover while arbiter is running"
 
-        print "Discovering devices..."
+        print("Discovering devices...")
         self.nodes = self.rrp.discover()
-        print " - nodes:", self.nodes
+        print(" - nodes:", self.nodes)
 
     def cmd_send(self, dst, *data):
         r"""Send data to destination.
@@ -413,18 +417,18 @@ class Worker(object):
         self.arbiter = Arbiter(self.rrp, self.nodes, self.remoteio)
 
         if foreground:
-            print "Round Robin arbiter running (debug={})...".format(debug)
-            print "Press Ctrl+C to stop it"
+            print("Round Robin arbiter running (debug={})...".format(debug))
+            print("Press Ctrl+C to stop it")
             try:
                 return self.arbiter.run(debug)
             except KeyboardInterrupt:
                 return
 
         if debug:
-            print "NOTE: debug only could be enabled on foreground mode"
+            print("NOTE: debug only could be enabled on foreground mode")
 
         self.arbiter.run_in_thread()
-        print "Round Robin arbiter running in background"
+        print("Round Robin arbiter running in background")
 
     def cmd_stop_rr(self):
         """Stops the running Round Robin arbiter (if any)"""
