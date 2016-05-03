@@ -540,7 +540,7 @@ class Shell(object):
 
 
 if __name__ == '__main__':
-    parser = ArgumentParser("Round Robin arbiter shell")
+    parser = ArgumentParser(description="Round Robin arbiter shell")
     parser.add_argument("--device", default="/dev/ttyUSB3",
                         help='USB device to use')
     parser.add_argument('--daemon', action='store_true',
