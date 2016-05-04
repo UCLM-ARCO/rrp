@@ -63,9 +63,12 @@ class Message(object):
         return data
 
     def __repr__(self):
-        from hexdump import hexdump
         retval = "Message ({} bytes):\n".format(self.size)
-        retval += hexdump(self.marshall(), result="return")
+        try:
+            from hexdump import hexdump
+            retval += hexdump(self.marshall(), result="return")
+        except ImportError:
+            retval += str(self.marshall())
         return retval
 
 
@@ -159,6 +162,7 @@ class Arbiter(object):
         if not self.nodes:
             self.nodes = self.rrp.discover()
 
+        print("Cycle around nodes: {}".format(self.nodes))
         try:
             while not self.finished:
                 messages = self.rrp.send_token(self.nodes, debug=debug)
