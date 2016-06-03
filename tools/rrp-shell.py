@@ -5,6 +5,7 @@ import os
 import sys
 import serial
 import traceback
+import time
 import Ice
 import logging
 from argparse import ArgumentParser
@@ -136,10 +137,11 @@ class RemoteIOService(object):
 
 
 class Arbiter(object):
-    def __init__(self, rrp, nodes=None, remoteio=None):
+    def __init__(self, rrp, nodes=None, remoteio=None, args=None):
         self.rrp = rrp
         self.nodes = nodes
         self.remoteio = remoteio
+        self.args = args
 
         if self.remoteio is not None:
             self.remoteio.set_arbiter(self)
@@ -159,17 +161,21 @@ class Arbiter(object):
         self.thread.join()
 
     def run(self, debug=False):
-        if not self.nodes:
-            self.nodes = self.rrp.discover()
+        while not self.finished:
+            start = time.time()
+            if not self.nodes:
+                self.nodes = self.rrp.discover()
 
-        print("Cycle around nodes: {}".format(self.nodes))
-        try:
-            while not self.finished:
-                messages = self.rrp.send_token(self.nodes, debug=debug)
-                self.append_in_queue(messages)
-                self.flush_out_queue()
-        except KeyboardInterrupt:
-            pass
+            logging.info("Cycle around nodes: {}".format(self.nodes))
+            try:
+                expired_timeout = False
+                while not self.finished and not expired_timeout:
+                    messages = self.rrp.send_token(self.nodes, debug=debug)
+                    self.append_in_queue(messages)
+                    self.flush_out_queue()
+                    expired_timeout = (time.time() - start) > self.args.rediscover
+            except KeyboardInterrupt:
+                self.finished = True
 
     def send(self, message, debug=False):
         self.out_queue.appendleft(message)
@@ -418,7 +424,7 @@ class Worker(object):
         if self.app_args.ice_iface:
             self.remoteio = RemoteIOService(sys.argv)
 
-        self.arbiter = Arbiter(self.rrp, self.nodes, self.remoteio)
+        self.arbiter = Arbiter(self.rrp, self.nodes, self.remoteio, self.app_args)
 
         if foreground:
             print("Round Robin arbiter running (debug={})...".format(debug))
@@ -432,7 +438,7 @@ class Worker(object):
             print("NOTE: debug only could be enabled on foreground mode")
 
         self.arbiter.run_in_thread()
-        print("Round Robin arbiter running in background")
+        logging.info("Round Robin arbiter running in background")
 
     def cmd_stop_rr(self):
         """Stops the running Round Robin arbiter (if any)"""
@@ -551,6 +557,8 @@ if __name__ == '__main__':
                         help='Launch arbiter in daemon mode (no interactive)')
     parser.add_argument("--ice-iface", action="store_true",
                         help="Add Ice RRP interface to send/receive data")
+    parser.add_argument("--rediscover", default="180", type=int,
+                        help="Discover again each N seconds")
 
     args = parser.parse_known_args()[0]
     s = Shell(args)
