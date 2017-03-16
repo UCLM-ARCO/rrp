@@ -24,7 +24,7 @@ logging.getLogger().setLevel(logging.INFO)
 
 
 class Message(object):
-    def __init__(self, source, destination, type, size=None, payload=None):
+    def __init__(self, source, destination, type, size=0, payload=None):
         self.source = source
         self.destination = destination
         self.type = type
@@ -32,21 +32,22 @@ class Message(object):
         self.payload = payload
 
         error = "Invalid message size, not enough data"
-        if size > 0:
+        if size is not None and size > 0:
             assert payload is not None, error
             assert size <= len(payload), error
 
     @classmethod
     def from_byteseq(cls, data):
-        assert data and len(data) >= 6 and data[:3] == "RRP", "Invalid message"
+        assert isinstance(data, bytes), "Invalid payload type, bytes expected"
+        assert data and len(data) >= 6 and data[:3] == b"RRP", "Invalid message"
 
-        source = ord(data[3])
-        destination = ord(data[4])
-        type = ord(data[5])
+        source = data[3]
+        destination = data[4]
+        type = data[5]
 
         if type in [RRP.TYPE_RESPONSE, RRP.TYPE_REQUEST]:
-            size = ord(data[6])
-            payload = ""
+            size = data[6]
+            payload = b""
             if size:
                 payload = data[7:]
 
@@ -54,13 +55,13 @@ class Message(object):
 
     def marshall(self):
         data = RRP.MAGIC
-        data += chr(self.source)       # source
-        data += chr(self.destination)  # destination addres
-        data += chr(self.type)         # type of message
+        data += bytes([self.source])       # source
+        data += bytes([self.destination])  # destination addres
+        data += bytes([self.type])         # type of message
 
         if self.type in [RRP.TYPE_RESPONSE, RRP.TYPE_REQUEST]:
-            data += chr(self.size)     # size of payload
-            data += self.payload       # payload
+            data += bytes([self.size])     # size of payload
+            data += self.payload           # payload
         return data
 
     def __repr__(self):
@@ -69,13 +70,13 @@ class Message(object):
             from hexdump import hexdump
             retval += hexdump(self.marshall(), result="return")
         except ImportError:
-            retval += str(self.marshall())
+            retval += self.marshall().decode()
         return retval
 
 
 class RemoteIOIO(RemoteIO.IO):
     def __init__(self):
-        self.arbier = None
+        self.arbiter = None
         self.observer = None
 
     def send(self, data, current):
@@ -214,7 +215,7 @@ class Arbiter(object):
 
 class RRP(object):
 
-    MAGIC = "RRP"
+    MAGIC = b"RRP"
     BROADCAST = 255
 
     TYPE_DISCOVER = 0
@@ -271,9 +272,9 @@ class RRP(object):
                 if not self.wait_magic():
                     break
 
-                source = ord(self.device.read(1))
-                destination = ord(self.device.read(1))
-                type = ord(self.device.read(1))
+                source = self.device.read(1)[0]
+                destination = self.device.read(1)[0]
+                type = self.device.read(1)[0]
 
                 message = Message(source, destination, type)
                 self.messages.appendleft(message)
@@ -288,7 +289,7 @@ class RRP(object):
                 if type not in [RRP.TYPE_REQUEST, RRP.TYPE_RESPONSE]:
                     continue
 
-                size = ord(self.device.read(1))
+                size = self.device.read(1)[0]
                 if size:
                     payload = self.device.read(size)
 
@@ -301,7 +302,7 @@ class RRP(object):
 
         return self.messages
 
-    def send(self, dest, payload="", type=TYPE_RESPONSE, debug=False):
+    def send(self, dest, payload=b"", type=TYPE_RESPONSE, debug=False):
         message = Message(0, dest, type, len(payload), payload)
         if debug:
             logging.info(message)
@@ -318,14 +319,14 @@ class RRP(object):
         if not self.wait_magic():
             return None
 
-        source = ord(self.device.read(1))
-        destination = ord(self.device.read(1))
-        type = ord(self.device.read(1))
+        source = self.device.read(1)[0]
+        destination = self.device.read(1)[0]
+        type = self.device.read(1)[0]
 
         size = None
         payload = None
         if type == RRP.TYPE_REQUEST or type == RRP.TYPE_RESPONSE:
-            size = ord(self.device.read(1))
+            size = self.device.read(1)[0]
             payload = self.device.read(size)
 
         if destination != 0:
@@ -343,7 +344,7 @@ class RRP(object):
             if not c:
                 return False
 
-            if RRP.MAGIC[i] != c:
+            if RRP.MAGIC[i] != c[0]:
                 i = 0
                 continue
             i += 1
@@ -402,8 +403,9 @@ class Worker(object):
         dst = int(dst)
         assert dst >= 0 and dst <= 255, "Invalid address"
 
-        data = " ".join(data)
+        data = b" ".join(data)
         data = data.decode("string_escape")
+        data = bytes(data, "utf-8")
 
         if self.arbiter is None:
             return self.rrp.send(dst, data, RRP.TYPE_REQUEST, debug=True)
