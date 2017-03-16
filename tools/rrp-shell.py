@@ -1,4 +1,4 @@
-#!/usr/bin/python -u
+#!/usr/bin/python3 -u
 # -*- mode: python; coding: utf-8 -*-
 
 import os
@@ -11,7 +11,7 @@ import logging
 from argparse import ArgumentParser
 from collections import deque
 from threading import Thread
-from Queue import Queue, Full
+from queue import Queue, Full
 
 pwd = os.path.dirname(__file__)
 path = os.path.join(pwd, "remoteio.ice")
@@ -447,16 +447,16 @@ class Worker(object):
 
         self.arbiter.finish()
         self.arbiter = None
-        print "Round Robin arbiter stopped"
+        print("Round Robin arbiter stopped")
 
     def cmd_status(self, *args):
         """Show current shell status"""
-        print " - {} devices detected:".format(len(self.nodes)), self.nodes
+        print(" - {} devices detected:".format(len(self.nodes)), self.nodes)
 
         rr_status = "stopped"
         if self.arbiter is not None:
             rr_status = "running"
-        print " - Round Robin arbiter:", rr_status
+        print(" - Round Robin arbiter:", rr_status)
 
     def cmd_receive(self, promiscuous=True):
         """Receive and show messages on network
@@ -471,13 +471,13 @@ class Worker(object):
             self.arbiter.set_promiscuous()
 
         try:
-            print "Start to show received messages..."
+            print("Start to show received messages...")
             while True:
                 message = self.arbiter.receive()
-                print message
+                print(message)
         except KeyboardInterrupt:
             pass
-        print "\r\r\rStop showing received messages"
+        print("\r\r\rStop showing received messages")
 
 
 class Shell(object):
@@ -489,22 +489,22 @@ class Shell(object):
 
     def prompt_input(self):
         prompt = "> "
-        return raw_input(prompt)
+        return input(prompt)
 
     def run_interactive(self):
-        print "Welcome to RRP shell!"
-        print "Enter 'h', '?' or 'help' to see your options\n"
+        print("Welcome to RRP shell!")
+        print("Enter 'h', '?' or 'help' to see your options\n")
 
         while not self.finished:
             try:
                 cmd = self.prompt_input()
                 if cmd:
                     self.run_command(cmd)
-                    print ""
+                    print("")
             except (KeyboardInterrupt, EOFError):
                 self.finished = True
 
-        print "\r\r\rBye!"
+        print("\r\r\rBye!")
 
     def run_as_daemon(self):
         self.worker.execute("start_rr", [True])
@@ -512,11 +512,11 @@ class Shell(object):
     def run_command(self, userinput):
         if userinput == "\x1b\x5b\x41":  # UP_ARROW
             if not self.history:
-                print "ERROR: cmd history is empty"
+                print("ERROR: cmd history is empty")
                 return
 
             userinput = self.history[-1]
-            print "Executing last command: '{}'".format(userinput)
+            print("Executing last command: '{}'".format(userinput))
         else:
             self.history.append(userinput)
 
@@ -537,14 +537,14 @@ class Shell(object):
         elif cmd in ["st"]:
             cmd = "status"
         elif cmd in ["print_traceback", "ptb"]:
-            print "Print traceback on error activated"
+            print("Print traceback on error activated")
             self.print_traceback = True
             return
 
         try:
             self.worker.execute(cmd, args)
         except Exception as e:
-            print "ERROR:", e
+            print("ERROR:", e)
             if self.print_traceback:
                 traceback.print_exc()
 
